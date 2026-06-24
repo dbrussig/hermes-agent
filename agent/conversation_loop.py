@@ -101,9 +101,24 @@ def _image_error_max_dimension(error: Exception) -> Optional[int]:
 
 
 def _ollama_context_limit_error(agent: Any, request_tokens: int) -> Optional[str]:
-    """Return a user-facing error when Ollama is loaded with too little context."""
+    """Return a user-facing error when Ollama is loaded with too little context.
+
+    Only validates when the *active* session is actually routed to an Ollama
+    provider or a local Ollama endpoint.  A stale ``ollama_num_ctx`` value in
+    config from a previous Ollama setup must not block non-Ollama providers
+    (e.g. Z.AI, OpenRouter, Anthropic …).
+    """
     if not getattr(agent, "tools", None):
         return None
+
+    # Skip validation when the active provider is not Ollama and the base URL
+    # is not a local endpoint (which could be a self-hosted Ollama server).
+    _provider = getattr(agent, "provider", "") or ""
+    if _provider != "ollama":
+        from agent.model_metadata import is_local_endpoint
+        _base_url = getattr(agent, "base_url", "") or ""
+        if not is_local_endpoint(_base_url):
+            return None
 
     runtime_ctx = getattr(agent, "_ollama_num_ctx", None)
     if not isinstance(runtime_ctx, int) or runtime_ctx <= 0:
